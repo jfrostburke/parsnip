@@ -1,0 +1,13 @@
+name: parsnip
+channels:
+    - astropy
+    - anaconda
+dependencies:
+    - python=3.7
+    - ipython
+    - numpy
+    - matplotlib
+    - astropy
+    - scipy
+    - sqlalchemy
+    - mysqlclient
