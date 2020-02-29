@@ -1,16 +1,4 @@
-import sys
-
-try:
-    from sqlalchemy import create_engine, MetaData, Table
-except ImportError:
-    alch_error = '\n\033[1m\033[91mERROR: \033[0m' \
-                 'Need to be in parsnip conda environment:\n' \
-                 '\tconda activate parsnip\n' \
-                 'If conda environment not installed yet, run:\n' \
-                 '\tconda env create -f parsnip.yaml\n'
-
-    print(alch_error)
-    sys.exit()
+from sqlalchemy import create_engine, MetaData, Table
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -37,7 +25,7 @@ def get_db_session(db_name, db_user, db_pwd, db_host):
     return db_dic
 
 
-def get_images(epoch, name, db_session, metadata, base):
+def get_images(db_session, metadata, base, epoch, name, filt, filetype):
 
     class TargetNames(base):
         __table__ = Table('targetnames', metadata, autoload=True)
@@ -48,65 +36,64 @@ def get_images(epoch, name, db_session, metadata, base):
     targetid = db_session.query(TargetNames).filter(
         (TargetNames.name == name)
     ).first().targetid
+    criteria = (PhotLCO.targetid == targetid)
 
-    (epoch_start, epoch_end) = epoch.split('-')
-    images = db_session.query(PhotLCO).filter(
-        (PhotLCO.targetid == targetid) &
-        (PhotLCO.dateobs >= epoch_start) &
-        (PhotLCO.dateobs <= epoch_end)
-    )
+    if epoch:
+        (epoch_start, epoch_end) = epoch.split('-') if '-' in epoch else (epoch, epoch)
+        criteria &= (PhotLCO.dayobs >= epoch_start)
+        criteria &= (PhotLCO.dayobs <= epoch_end)
 
-    print_images(images)
+    if filt:
+        if filt == 'sloan':
+            sloan_crit = (PhotLCO.filter == 'up')
+            for sloan_filt in ['gp', 'rp', 'ip', 'zs']:
+                sloan_crit |= (PhotLCO.filter == sloan_filt)
+            criteria &= (sloan_crit)
+        elif filt == 'landolt':
+            landolt_crit = (PhotLCO.filter == 'U')
+            for landolt_filt in ['B', 'V', 'R', 'I']:
+                landolt_crit |= (PhotLCO.filter == landolt_filt)
+            criteria &= (landolt_crit)
+        else:
+            criteria &= (PhotLCO.filter.like(f'%{filt}%'))
+
+    criteria &= (PhotLCO.quality == 127) # good images
+    criteria &= (PhotLCO.filetype == filetype)
+
+    images = db_session.query(PhotLCO).filter(criteria)
+    
+    # Need width of longest zcat filename to format printout nicely
+    zcats = [image.zcat for image in images.distinct(PhotLCO.zcat)]
+
+    if not zcats:
+        print()
+        print('No images selected')
+        print()
+    else:
+        zcat_width = len(max(zcats, key=len))
+        _print_images(images, zcat_width)
 
     return images
 
 
-def print_images(images):
+def _print_images(images, zcat_width):
+    
+    number_of_images = 0
+    
+    print()
+    print('filename\t\t\t\tobject\t\tfilter\tWCS\tPSF\tpsfmag\tapmag\tzcat\t\t\tmag')
 
-    x_bad = '\033[1m\033[91mX\033[0m'
-    y_good = '\033[1m\033[92mY\033[0m'
-
-    print('########################')
-    print('#image name\t\t\t\tobject\t\tfilter\tWCS\tPSF\tpsfmag\tapmag\tzcat\t\tmag')
-    zcat_width = len(max([x.zcat for x in images], key=len))
-    length = 0
     for image in images:
 
-        length += 1
+        number_of_images += 1
 
         filename = image.filename.split('.fits')[0]
-
-        # TODO: replace this with helper function so copy less code
-        if 'psf.fits' in image.psf:
-            psf = y_good
-        else:
-            psf = x_bad
-
-        if int(image.wcs) == 0:
-            wcs = y_good
-        else:
-            wcs = x_bad
-
-        col_width = 6
-        if int(image.psfmag) != 9999:
-            psfmag = str(image.psfmag)[:col_width]
-        else:
-            psfmag = x_bad.ljust(col_width)
-
-        if int(image.apmag) != 9999:
-            apmag = str(image.apmag)[:col_width]
-        else:
-            apmag = x_bad.ljust(col_width)
-
-        if int(image.mag) != 9999:
-            mag = str(image.mag)[:col_width]
-        else:
-            mag = x_bad.ljust(col_width)
-
-        if 'cat' in image.zcat:
-            zcat = image.zcat.ljust(zcat_width)
-        else:
-            zcat = x_bad.ljust(zcat_width)
+        psf = _format_output(image.psf, good_value='psf.fits')
+        wcs = _format_output(image.wcs, good_value=0.0)
+        psfmag = _format_output(image.psfmag, bad_value=9999)
+        apmag = _format_output(image.apmag, bad_value=9999)
+        mag = _format_output(image.mag, bad_value=9999)
+        zcat = _format_output(image.zcat, pad=zcat_width, good_value='cat')
 
         print(
             f'{filename}\t\t{image.objname}\t{image.filter}\t'
@@ -115,7 +102,28 @@ def print_images(images):
         )
 
     print()
-    print(f'Number of images: {length}')
+    print(f'Number of images: {number_of_images}')
     print()
 
     return
+
+
+def _format_output(param, pad=6, bad_value='', good_value=''):
+    
+    bad = '\033[1m\033[91mX\033[0m'.ljust(pad)
+    good = '\033[1m\033[92mY\033[0m'.ljust(pad)
+
+    if bad_value:
+        output = str(param)[:pad] if int(param) != bad_value else bad
+    elif type(good_value) == str:
+        if good_value in param:
+            output = param.ljust(pad) if 'cat' in good_value else good
+        else:
+            output = bad
+    elif type(good_value) == float:
+        output = good if int(param) == good_value else bad
+    else:
+        output = bad
+
+    return output
+        
