@@ -4,6 +4,7 @@ import argparse
 
 try:
     import utils
+    import psf
 except:
     alch_error = '\n\033[1m\033[91mERROR: \033[0m' \
                  'Need to be in parsnip conda environment:\n' \
@@ -26,6 +27,10 @@ if __name__ == "__main__":
     parser.add_argument('--filetype', type=int, choices=(1,3,4),
         default=1, const=1, nargs='?',
         help='filetype to reduce: 1 (default), 3 (subtracted), 4 (template)')
+    parser.add_argument('-s', '--stage', type=str, choices=('psf'),
+        help='stage to run')
+    parser.add_argument('--show', action='store_true',
+        help='displays plots for visualization and analysis')
     args = parser.parse_args()
 
     db_name = os.getenv('pipeline_db_name')
@@ -36,6 +41,11 @@ if __name__ == "__main__":
     db_dic = utils.get_db_session(db_name, db_user, db_pwd, db_host)
     images = utils.get_images(**db_dic, epoch=args.epoch, name=args.name, 
         filt=args.filt, filetype=args.filetype)
+
+    if args.stage == 'psf':
+        print('Generating psfs for images . . .')
+        psf.make_psf(images, args.show)
+        print()
 
     db_dic['db_session'].close()
 

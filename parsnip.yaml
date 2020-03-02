@@ -2,6 +2,7 @@ name: parsnip
 channels:
     - astropy
     - anaconda
+    - conda-forge
 dependencies:
     - python=3.7
     - ipython
@@ -9,5 +10,7 @@ dependencies:
     - matplotlib
     - astropy
     - scipy
+    - astroscrappy
+    - photutils
     - sqlalchemy
     - mysqlclient
