@@ -1,3 +1,5 @@
+import os
+import pickle
 from sqlalchemy import create_engine, MetaData, Table
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -48,20 +50,20 @@ def get_images(db_session, metadata, base, epoch, name, filt, filetype):
             sloan_crit = (PhotLCO.filter == 'up')
             for sloan_filt in ['gp', 'rp', 'ip', 'zs']:
                 sloan_crit |= (PhotLCO.filter == sloan_filt)
-            criteria &= (sloan_crit)
+            criteria &= sloan_crit
         elif filt == 'landolt':
             landolt_crit = (PhotLCO.filter == 'U')
             for landolt_filt in ['B', 'V', 'R', 'I']:
                 landolt_crit |= (PhotLCO.filter == landolt_filt)
-            criteria &= (landolt_crit)
+            criteria &= landolt_crit
         else:
             criteria &= (PhotLCO.filter.like(f'%{filt}%'))
 
-    criteria &= (PhotLCO.quality == 127) # good images
+    criteria &= (PhotLCO.quality == 127)  # good images
     criteria &= (PhotLCO.filetype == filetype)
 
-    images = db_session.query(PhotLCO).filter(criteria)
-    
+    images = db_session.query(PhotLCO).filter(criteria).order_by(PhotLCO.filename)
+
     # Need width of longest zcat filename to format printout nicely
     zcats = [image.zcat for image in images.distinct(PhotLCO.zcat)]
 
@@ -108,7 +110,7 @@ def _print_images(images, zcat_width):
     return
 
 
-def _format_output(param, pad=6, bad_value='', good_value=''):
+def _format_output(param, pad=6, bad_value=None, good_value=None):
     
     bad = '\033[1m\033[91mX\033[0m'.ljust(pad)
     good = '\033[1m\033[92mY\033[0m'.ljust(pad)
@@ -126,4 +128,34 @@ def _format_output(param, pad=6, bad_value='', good_value=''):
         output = bad
 
     return output
-        
+
+
+def create_or_update_pickle(filename, key, val):
+
+    pickle_filename = get_pickle_filename(filename)
+    if os.path.isfile(pickle_filename):
+        metadata = pickle.load(open(pickle_filename, 'rb'))
+        metadata[key] = val
+        pickle.dump(metadata, open(pickle_filename, 'wb'))
+    else:
+        metadata = {
+            key: val,
+        }
+        pickle.dump(metadata, open(pickle_filename, 'wb'))
+
+
+def load_pickle(filename):
+
+    pickle_filename = get_pickle_filename(filename)
+    if os.path.isfile(pickle_filename):
+        metadata = pickle.load(open(pickle_filename, 'rb'))
+    else:
+        metadata = {}
+    return metadata
+
+
+def get_pickle_filename(filename):
+
+    # TODO: change pickle location to /supernova/data when the time comes
+    pickle_filename = './pickles/' + os.path.splitext(filename)[0] + '.pickle'
+    return pickle_filename

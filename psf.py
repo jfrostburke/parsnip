@@ -2,15 +2,16 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-from astropy.io import fits
+from astropy.io.fits import getdata
 from astropy.table import Table
 from astropy.nddata import NDData
 from astropy.visualization import ImageNormalize, ZScaleInterval, LinearStretch, simple_norm
 from photutils import EPSFBuilder
 from photutils.psf import extract_stars
-from astroscrappy import detect_cosmics
 from scipy import spatial
 from scipy.stats import sigmaclip
+
+from utils import load_pickle
 
 
 def make_psf(image, show, datamax, nstars):
@@ -22,46 +23,44 @@ def make_psf(image, show, datamax, nstars):
 
     print(f'Working on {image.filename}')
     full_filepath = image.filepath + image.filename
-    hdul = fits.open(full_filepath)
-    data = hdul[0].data
-
-    banzai = hdul[1].data
-    banzai_filtered = _filter_banzai(banzai, datamax)
-    banzai_coords = np.array([coord for coord in zip(banzai_filtered['x'],
-                                                     banzai_filtered['y'])])
-
-    print('\tIgnoring cosmic rays . . .')
-    (crmask, data) = detect_cosmics(data)
-    cr_coords = np.argwhere(crmask)
-    print(f'\t\t{len(cr_coords)} cosmic rays detected')
-    # TODO: Think about structure more
-    #   CR discovery is by far the slowest part, separate step and save?
-    #   Best way to save PSF/python objects?
+    data = getdata(full_filepath, 0)
+    banzai = getdata(full_filepath, 1)
+    banzai_coords = _filter_banzai(banzai, datamax)
+    print(f'\t{len(banzai_coords)} stars detected')
 
     size = 25
-    tree = spatial.KDTree(cr_coords)
-    distances = tree.query(banzai_coords)[0]
-    sep_constraint = distances > size
-    print(f'\t\t{len(banzai_coords)} stars detected')
-    psf_stars = Table(banzai_coords[sep_constraint][:nstars],
-                      names=['x', 'y'])
-    banzai_coords = Table(banzai_coords[sep_constraint],
+    metadata = load_pickle(image.filename)
+    if 'cr_coords' in metadata.keys():
+        print('\tIgnoring cosmic rays . . .')
+        cr_coords = metadata['cr_coords']
+
+        tree = spatial.KDTree(cr_coords)
+        distances = tree.query(banzai_coords)[0]
+        sep_constraint = distances > size
+        psf_stars = Table(banzai_coords[sep_constraint][:nstars],
                           names=['x', 'y'])
+        banzai_coords = Table(banzai_coords[sep_constraint],
+                              names=['x', 'y'])
+    else:
+        print('\t-s cosmic not run, not ignoring cosmic rays . . .')
+        psf_stars = Table(banzai_coords[:nstars],
+                          names=['x', 'y'])
+        banzai_coords = Table(banzai_coords,
+                              names=['x', 'y'])
 
     nddata = NDData(data=data)
     stars = extract_stars(nddata, psf_stars, size=size)
-    # extract_stars is fast on banzai_coords, will need them for psfmag stage
-    # refactor this to have a find_stars function to use in psfmag stage?
 
     print('\tBuilding psf . . .')
     epsf_builder = EPSFBuilder(oversampling=2, maxiters=3,
                                progress_bar=False)
     epsf, fitted_stars = epsf_builder(stars)
-
-    hdul.close()
+    # TODO: add these and banzai_coords to pickle file
+    #   check how big it gets/how long it takes to load
 
     t_end = time.time()
-    print(f'Time to generate psf (s): {int(t_end-t_start)}')
+    print(f'Time to generate psf (s): {t_end-t_start:.2f}')
+    print()
 
     if show:
         check_psf(data, image.filename, epsf.data, banzai_coords, psf_stars, size)
@@ -70,6 +69,8 @@ def make_psf(image, show, datamax, nstars):
 
 
 def check_psf(data_img, filename, data_psf, stars_all, stars_psf, size):
+
+    # TODO: make checkpsf stage work, probably change this to view_psf and add function
 
     plt.ion()
     plt.clf()
@@ -112,7 +113,11 @@ def _filter_banzai(banzai, datamax):
         filtered_vals, _, _ = sigmaclip(banzai[param], low=sigma, high=sigma)
         mask &= (banzai[param] >= min(filtered_vals))
         mask &= (banzai[param] <= max(filtered_vals))
-    # Sort by S/N?
     banzai_filtered = banzai[mask]
 
-    return banzai_filtered
+    sorted_indices = banzai_filtered['PEAK'].argsort()
+    x = banzai_filtered['x'][sorted_indices[::-1]]
+    y = banzai_filtered['y'][sorted_indices[::-1]]
+    banzai_coords = np.array([coord for coord in zip(x, y)])
+
+    return banzai_coords

@@ -28,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument('--filetype', type=int, choices=(1, 3, 4),
                         default=1, const=1, nargs='?',
                         help='filetype to reduce: 1 (default), 3 (subtracted), 4 (template)')
-    parser.add_argument('-s', '--stage', type=str, choices=('psf', 'psfmag'),
+    parser.add_argument('-s', '--stage', type=str, choices=('cosmic', 'psf', 'psfmag'),
                         help='stage to run')
     parser.add_argument('--show', action='store_true',
                         help='displays plots for visualization and analysis')
@@ -43,9 +43,18 @@ if __name__ == "__main__":
     images = utils.get_images(**db_dic, epoch=args.epoch, name=args.name, 
                               filt=args.filt, filetype=args.filetype)
 
+    if args.stage == 'cosmic':
+        from cosmic_ray import get_cosmic_rays
+        print('Detecting cosmic rays . . .')
+        print()
+        for image in images:
+            get_cosmic_rays(image)
+        print()
+
     if args.stage == 'psf':
         from psf import make_psf  # saves >1 second of import on startup
         print('Generating psfs for images . . .')
+        print()
         for image in images:
             (epsf, fitted_stars) = make_psf(image, show=args.show,
                                             datamax=args.datamax,
