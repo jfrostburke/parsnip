@@ -136,12 +136,14 @@ def create_or_update_pickle(filename, key, val):
     if os.path.isfile(pickle_filename):
         metadata = pickle.load(open(pickle_filename, 'rb'))
         metadata[key] = val
-        pickle.dump(metadata, open(pickle_filename, 'wb'))
+        with open(pickle_filename, 'wb') as pickle_file:
+            pickle.dump(metadata, pickle_file, protocol=pickle.HIGHEST_PROTOCOL)
     else:
         metadata = {
             key: val,
         }
-        pickle.dump(metadata, open(pickle_filename, 'wb'))
+        with open(pickle_filename, 'wb') as pickle_file:
+            pickle.dump(metadata, pickle_file, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def load_pickle(filename):

@@ -11,10 +11,12 @@ from photutils.psf import extract_stars
 from scipy import spatial
 from scipy.stats import sigmaclip
 
-from utils import load_pickle
+from utils import load_pickle, create_or_update_pickle
 
 
 def make_psf(image, show, datamax, nstars):
+
+    # TODO: add stage checking generally to stop errors
 
     t_start = time.time()
 
@@ -31,8 +33,8 @@ def make_psf(image, show, datamax, nstars):
     size = 25
     metadata = load_pickle(image.filename)
     if 'cr_coords' in metadata.keys():
-        print('\tIgnoring cosmic rays . . .')
         cr_coords = metadata['cr_coords']
+        print(f'\tIgnoring {len(cr_coords)} cosmic rays . . .')
 
         tree = spatial.KDTree(cr_coords)
         distances = tree.query(banzai_coords)[0]
@@ -55,17 +57,20 @@ def make_psf(image, show, datamax, nstars):
     epsf_builder = EPSFBuilder(oversampling=2, maxiters=3,
                                progress_bar=False)
     epsf, fitted_stars = epsf_builder(stars)
-    # TODO: add these and banzai_coords to pickle file
-    #   check how big it gets/how long it takes to load
+    # can only pickle python built-ins?
+    create_or_update_pickle(filename=image.filename, key='epsf',
+                            val=epsf.data.tolist())
+    create_or_update_pickle(filename=image.filename, key='psf_fitted_stars',
+                            val=np.array(banzai_coords).tolist())
+    #create_or_update_pickle(filename=image.filename, key='psf_fitted_stars', val=fitted_stars)
 
     t_end = time.time()
     print(f'Time to generate psf (s): {t_end-t_start:.2f}')
-    print()
 
     if show:
         check_psf(data, image.filename, epsf.data, banzai_coords, psf_stars, size)
 
-    return epsf, fitted_stars
+    print()
 
 
 def check_psf(data_img, filename, data_psf, stars_all, stars_psf, size):

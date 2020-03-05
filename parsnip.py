@@ -1,3 +1,4 @@
+import time
 import sys
 import os
 import argparse
@@ -16,6 +17,8 @@ except (SyntaxError, ImportError) as e:
 
 
 if __name__ == "__main__":
+
+    start = time.time()
 
     parser = argparse.ArgumentParser(
         description='PARSNIP: Pipeline for the Analysis and Reduction of SN '
@@ -56,9 +59,18 @@ if __name__ == "__main__":
         print('Generating psfs for images . . .')
         print()
         for image in images:
-            (epsf, fitted_stars) = make_psf(image, show=args.show,
-                                            datamax=args.datamax,
-                                            nstars=args.nstars)
+            make_psf(image, show=args.show, datamax=args.datamax,
+                     nstars=args.nstars)
+        print()
+
+    if args.stage == 'psfmag':
+        from photometry import psf_photometry
+        print('Running psf photometry . . .')
+        print()
+        for image in images:
+            psf_photometry(image)
         print()
 
     db_dic['db_session'].close()
+    end = time.time()
+    print(f'Elapsed time (s): {end-start:.3f}')
