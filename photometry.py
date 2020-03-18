@@ -68,6 +68,9 @@ def psf_photometry(image, show):
     print()
 
     # TODO: pickle residual image around sn? can't save photometry
+    #   only extract photometry on stars in catalog? will save time
+    #   limit to 50 stars? add that as command line option?
+    #   add multicore option? for loops seem parallelizable
 
 
 def _get_sn_xy(image):
