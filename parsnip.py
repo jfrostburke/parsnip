@@ -68,7 +68,7 @@ if __name__ == "__main__":
         print('Running psf photometry . . .')
         print()
         for image in images:
-            psf_photometry(image)
+            psf_photometry(image, show=args.show)
         print()
 
     db_dic['db_session'].close()
