@@ -14,7 +14,7 @@ from scipy.stats import sigmaclip
 from utils import load_pickle, create_or_update_pickle
 
 
-def make_psf(image, show, datamax, nstars):
+def make_psf(filepath, filename, show, datamax, nstars, ncores):
 
     # TODO: add stage checking generally to stop errors
 
@@ -23,15 +23,15 @@ def make_psf(image, show, datamax, nstars):
     if not nstars:
         nstars = 12
 
-    print(f'Working on {image.filename}')
-    full_filepath = image.filepath + image.filename
+    print(f'Working on {filename}')
+    full_filepath = filepath + filename
     data = getdata(full_filepath, 0)
     banzai = getdata(full_filepath, 1)
     banzai_coords = _filter_banzai(banzai, datamax)
     print(f'\t{len(banzai_coords)} stars detected')
 
     size = 25
-    metadata = load_pickle(image.filename)
+    metadata = load_pickle(filename)
     if 'cr_coords' in metadata.keys():
         cr_coords = metadata['cr_coords']
         print(f'\tIgnoring {len(cr_coords)} cosmic rays . . .')
@@ -58,17 +58,19 @@ def make_psf(image, show, datamax, nstars):
                                progress_bar=False)
     epsf, fitted_stars = epsf_builder(stars)
     # can only pickle python built-ins?
-    create_or_update_pickle(filename=image.filename, key='epsf',
+    create_or_update_pickle(filename=filename, key='epsf',
                             val=epsf.data.tolist())
-    create_or_update_pickle(filename=image.filename, key='psf_fitted_stars',
+    create_or_update_pickle(filename=filename, key='psf_fitted_stars',
                             val=np.array(banzai_coords).tolist())
-    #create_or_update_pickle(filename=image.filename, key='psf_fitted_stars', val=fitted_stars)
+    #create_or_update_pickle(filename=filename, key='psf_fitted_stars', val=fitted_stars)
 
     t_end = time.time()
     print(f'Time to generate psf (s): {t_end-t_start:.2f}')
 
-    if show:
-        check_psf(data, image.filename, epsf.data, banzai_coords, psf_stars, size)
+    if show and ncores == 1:
+        check_psf(data, filename, epsf.data, banzai_coords, psf_stars, size)
+    elif show and ncores != 1:
+        print("Can't display psfs while using multiple cores")
 
     print()
 
@@ -107,6 +109,8 @@ def check_psf(data_img, filename, data_psf, stars_all, stars_psf, size):
 
 
 def _filter_banzai(banzai, datamax):
+
+    # TODO: add edge padding
 
     if datamax:
         mask = (banzai['PEAK'] < datamax)

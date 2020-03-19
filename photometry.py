@@ -15,21 +15,21 @@ import matplotlib.pyplot as plt
 from utils import load_pickle, create_or_update_pickle
 
 
-def psf_photometry(image, show):
+def psf_photometry(filepath, filename, show):
 
     start = time.time()
     
     warnings.simplefilter('ignore', category=FITSFixedWarning)
     warnings.simplefilter('ignore', category=AstropyUserWarning)
 
-    print(f'Working on {image.filename}')
+    print(f'Working on {filename}')
 
-    full_filepath = image.filepath + image.filename
+    full_filepath = filepath + filename
     image_data = getdata(full_filepath)
     hdr = getheader(full_filepath)
     fwhm = hdr['L1FWHM']/hdr['PIXSCALE']
 
-    metadata = load_pickle(image.filename)
+    metadata = load_pickle(filename)
     epsf_data = np.array(metadata['epsf'])
     epsf = EPSFModel(epsf_data, fwhm=fwhm, oversampling=2)
     daogroup = DAOGroup(2.0*fwhm)
@@ -55,10 +55,10 @@ def psf_photometry(image, show):
     print()
 
     print('\tExtracting supernova . . .')
-    x, y = _get_sn_xy(image)
+    x, y = _get_sn_xy(filepath, filename)
     psfmags = _do_phot(x, y, image_data, fitshape, photometry, psfmags)
 
-    create_or_update_pickle(image.filename, key='psfmags', val=psfmags)
+    create_or_update_pickle(filename, key='psfmags', val=psfmags)
 
     end = time.time()
     print(f'Time to perform photometry (s): {end-start:.3f}')
@@ -73,9 +73,11 @@ def psf_photometry(image, show):
     #   add multicore option? for loops seem parallelizable
 
 
-def _get_sn_xy(image):
+def _get_sn_xy(filepath, filename):
 
-    full_filepath = image.filepath + image.filename
+    # TODO: change this to use the db value
+
+    full_filepath = filepath + filename
     hdr = getheader(full_filepath)
     ra = hdr['CAT-RA']
     dec = hdr['CAT-DEC']

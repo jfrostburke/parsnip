@@ -2,6 +2,7 @@ import time
 import sys
 import os
 import argparse
+from joblib import Parallel, delayed
 
 try:
     import utils
@@ -31,10 +32,14 @@ if __name__ == "__main__":
     parser.add_argument('--filetype', type=int, choices=(1, 3, 4),
                         default=1, const=1, nargs='?',
                         help='filetype to reduce: 1 (default), 3 (subtracted), 4 (template)')
-    parser.add_argument('-s', '--stage', type=str, choices=('cosmic', 'psf', 'psfmag'),
+    parser.add_argument('-s', '--stage', type=str, 
+                        choices=('cosmic', 'psf', 'psfmag', 'zcat'),
                         help='stage to run')
     parser.add_argument('--show', action='store_true',
                         help='displays plots for visualization and analysis')
+    parser.add_argument('--ncores', type=int,
+                        default=1, const=1, nargs='?',
+                        help='number of cores to run on')
     args = parser.parse_args()
 
     db_name = os.getenv('pipeline_db_name')
@@ -50,25 +55,46 @@ if __name__ == "__main__":
         from cosmic_ray import get_cosmic_rays
         print('Detecting cosmic rays . . .')
         print()
-        for image in images:
-            get_cosmic_rays(image)
+        Parallel(n_jobs = args.ncores)(
+            delayed(get_cosmic_rays)
+                   (filepath=image.filepath, filename=image.filename) 
+            for image in images
+        )
         print()
 
     if args.stage == 'psf':
-        from psf import make_psf  # saves >1 second of import on startup
+        from psf import make_psf
         print('Generating psfs for images . . .')
         print()
-        for image in images:
-            make_psf(image, show=args.show, datamax=args.datamax,
-                     nstars=args.nstars)
+        Parallel(n_jobs = args.ncores)(
+            delayed(make_psf)
+                   (filepath=image.filepath, filename=image.filename,
+                        show=args.show, datamax=args.datamax, nstars=args.nstars,
+                        ncores=args.ncores
+                   )
+            for image in images
+        )
         print()
 
     if args.stage == 'psfmag':
         from photometry import psf_photometry
         print('Running psf photometry . . .')
         print()
+        Parallel(n_jobs = args.ncores)(
+            delayed(psf_photometry)
+                   (filepath=image.filepath, filename=image.filename,
+                        show=args.show
+                   )
+            for image in images
+        )
+        print()
+
+    if args.stage == 'zcat':
+        from zeropoint import make_zeropoint
+        print('Generating zeropoints . . .')
+        print()
         for image in images:
-            psf_photometry(image, show=args.show)
+            make_zeropoint(image)
         print()
 
     db_dic['db_session'].close()
