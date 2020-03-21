@@ -28,10 +28,13 @@ def psf_photometry(filepath, filename, show):
     image_data = getdata(full_filepath)
     hdr = getheader(full_filepath)
     fwhm = hdr['L1FWHM']/hdr['PIXSCALE']
+    exptime = hdr['EXPTIME']
 
     metadata = load_pickle(filename)
     epsf_data = np.array(metadata['epsf'])
     epsf = EPSFModel(epsf_data, fwhm=fwhm, oversampling=2)
+    # epsf.x_0.fixed = True
+    # epsf.y_0.fixed = True
     daogroup = DAOGroup(2.0*fwhm)
     bkg = MMMBackground()
     fitter = LevMarLSQFitter()
@@ -50,13 +53,13 @@ def psf_photometry(filepath, filename, show):
     for star in metadata['psf_fitted_stars']:
         counter += 1
         (x, y) = star
-        psfmags = _do_phot(x, y, image_data, fitshape, photometry, psfmags)
+        psfmags = _do_phot(x, y, image_data, exptime, fitshape, photometry, psfmags)
         print(f'\t\tStars extracted: {counter}/{len(metadata["psf_fitted_stars"])}', end='\r')
     print()
 
     print('\tExtracting supernova . . .')
     x, y = _get_sn_xy(filepath, filename)
-    psfmags = _do_phot(x, y, image_data, fitshape, photometry, psfmags)
+    psfmags = _do_phot(x, y, image_data, exptime, fitshape, photometry, psfmags)
 
     create_or_update_pickle(filename, key='psfmags', val=psfmags)
 
@@ -88,7 +91,7 @@ def _get_sn_xy(filepath, filename):
     return float(x), float(y)
 
 
-def _do_phot(x, y, image_data, fitshape, photometry, psfmags):
+def _do_phot(x, y, image_data, exptime, fitshape, photometry, psfmags):
 
     data_fit = image_data[
         int(y)-fitshape:int(y)+fitshape, int(x)-fitshape:int(x)+fitshape
@@ -96,8 +99,8 @@ def _do_phot(x, y, image_data, fitshape, photometry, psfmags):
     init_guesses = Table(np.array([fitshape, fitshape]), names=['x_0', 'y_0'])
     results = photometry(image=data_fit, init_guesses=init_guesses)
 
-    psfflux = results['flux_fit'][0]
-    dpsfflux = results['flux_unc'][0]
+    psfflux = results['flux_fit'][0]/exptime
+    dpsfflux = results['flux_unc'][0]/exptime
 
     psfmag = -2.5*np.log10(psfflux)
     dpsfmag = abs((-2.5*dpsfflux)/(psfflux*np.log(10)))

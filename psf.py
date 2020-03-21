@@ -27,7 +27,8 @@ def make_psf(filepath, filename, show, datamax, nstars, ncores):
     full_filepath = filepath + filename
     data = getdata(full_filepath, 0)
     banzai = getdata(full_filepath, 1)
-    banzai_coords = _filter_banzai(banzai, datamax)
+    # TODO: be smarter about saving useful stars, add field option
+    banzai_coords = _filter_banzai(banzai, datamax)[:100]
     print(f'\t{len(banzai_coords)} stars detected')
 
     size = 25

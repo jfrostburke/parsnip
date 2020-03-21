@@ -90,11 +90,12 @@ if __name__ == "__main__":
         print()
 
     if args.stage == 'zcat':
-        from zeropoint import make_zeropoint
+        from zeropoint import get_catalog, make_zeropoint
         print('Generating zeropoints . . .')
         print()
+        catalog = get_catalog(**db_dic, image=images[0])
         for image in images:
-            make_zeropoint(image)
+            make_zeropoint(image=image, catalog=catalog, show=args.show)
         print()
 
     db_dic['db_session'].close()
