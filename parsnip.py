@@ -33,8 +33,12 @@ if __name__ == "__main__":
                         default=1, const=1, nargs='?',
                         help='filetype to reduce: 1 (default), 3 (subtracted), 4 (template)')
     parser.add_argument('-s', '--stage', type=str, 
-                        choices=('cosmic', 'psf', 'psfmag', 'zcat'),
+                        choices=('cosmic', 'psf', 'psfmag', 'zcat', 'all'),
                         help='stage to run')
+    parser.add_argument('--field', type=str, 
+                        choices=('apass'),
+                        help='catalog to reference in choosing psf stars ' \
+                             'or calibrating zeropoints')
     parser.add_argument('--show', action='store_true',
                         help='displays plots for visualization and analysis')
     parser.add_argument('--ncores', type=int,
@@ -62,38 +66,41 @@ if __name__ == "__main__":
         )
         print()
 
-    if args.stage == 'psf':
+    if args.stage == 'psf' or args.stage == 'all':
         from psf import make_psf
         print('Generating psfs for images . . .')
         print()
+        catalog_filepath = (utils.get_catalog(**db_dic, image=images[0]) 
+                            if args.field == 'apass' else '')
         Parallel(n_jobs = args.ncores)(
             delayed(make_psf)
-                   (filepath=image.filepath, filename=image.filename,
-                        show=args.show, datamax=args.datamax, nstars=args.nstars,
-                        ncores=args.ncores
+                   (filepath=image.filepath, filename=image.filename, filt_name=image.filter[0],
+                    show=args.show, datamax=args.datamax, nstars=args.nstars,
+                    ncores=args.ncores, catalog_filepath=catalog_filepath
                    )
             for image in images
         )
         print()
 
-    if args.stage == 'psfmag':
+    if args.stage == 'psfmag' or args.stage == 'all':
         from photometry import psf_photometry
         print('Running psf photometry . . .')
         print()
+        sn_ra, sn_dec = utils.get_sn_radec(**db_dic, image=images[0])
         Parallel(n_jobs = args.ncores)(
             delayed(psf_photometry)
                    (filepath=image.filepath, filename=image.filename,
-                        show=args.show
+                    show=args.show, sn_ra=sn_ra, sn_dec=sn_dec
                    )
             for image in images
         )
         print()
 
-    if args.stage == 'zcat':
-        from zeropoint import get_catalog, make_zeropoint
+    if args.stage == 'zcat' or args.stage == 'all':
+        from zeropoint import make_zeropoint
         print('Generating zeropoints . . .')
         print()
-        catalog = get_catalog(**db_dic, image=images[0])
+        catalog = utils.get_catalog(**db_dic, image=images[0])
         for image in images:
             make_zeropoint(image=image, catalog=catalog, show=args.show)
         print()

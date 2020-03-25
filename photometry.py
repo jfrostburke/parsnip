@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from utils import load_pickle, create_or_update_pickle
 
 
-def psf_photometry(filepath, filename, show):
+def psf_photometry(filepath, filename, show, sn_ra, sn_dec):
 
     start = time.time()
     
@@ -58,7 +58,7 @@ def psf_photometry(filepath, filename, show):
     print()
 
     print('\tExtracting supernova . . .')
-    x, y = _get_sn_xy(filepath, filename)
+    x, y = _get_sn_xy(filepath, filename, sn_ra, sn_dec)
     psfmags = _do_phot(x, y, image_data, exptime, fitshape, photometry, psfmags)
 
     create_or_update_pickle(filename, key='psfmags', val=psfmags)
@@ -76,18 +76,14 @@ def psf_photometry(filepath, filename, show):
     #   add multicore option? for loops seem parallelizable
 
 
-def _get_sn_xy(filepath, filename):
-
-    # TODO: change this to use the db value
+def _get_sn_xy(filepath, filename, ra, dec):
 
     full_filepath = filepath + filename
     hdr = getheader(full_filepath)
-    ra = hdr['CAT-RA']
-    dec = hdr['CAT-DEC']
-    c = SkyCoord(ra, dec, unit=(u.hourangle, u.deg))
-    (ra0, dec0) = (c.ra.degree, c.dec.degree)
     wcs = WCS(hdr)
-    x, y = wcs.wcs_world2pix(ra0, dec0, 1)
+    
+    x, y = wcs.wcs_world2pix(ra*u.deg, dec*u.deg, 1)
+    
     return float(x), float(y)
 
 

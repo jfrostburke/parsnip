@@ -161,3 +161,32 @@ def get_pickle_filename(filename):
     # TODO: change pickle location to /supernova/data when the time comes
     pickle_filename = './pickles/' + os.path.splitext(filename)[0] + '.pickle'
     return pickle_filename
+
+
+def get_catalog(db_session, metadata, base, image):
+
+    # TODO: generalize to using astroquery? just returning apass to start
+
+    class Targets(base):
+        __table__ = Table('targets', metadata, autoload=True)
+
+    catalog_filename = db_session.query(Targets).filter(
+        (Targets.id == image.targetid)
+    ).first().apass_cat
+    catalog_filepath = '/supernova/github/lcogtsnpipe/trunk/src/lsc/standard/cat/apass/'
+    catalog = catalog_filepath + catalog_filename
+
+    return catalog
+
+
+def get_sn_radec(db_session, metadata, base, image):
+
+    class Targets(base):
+        __table__ = Table('targets', metadata, autoload=True)
+
+    target = db_session.query(Targets).filter(
+        (Targets.id == image.targetid)
+    ).first()
+
+    return target.ra0, target.dec0
+

@@ -12,9 +12,10 @@ from scipy import spatial
 from scipy.stats import sigmaclip
 
 from utils import load_pickle, create_or_update_pickle
+from crossmatch import catalog_crossmatch
 
 
-def make_psf(filepath, filename, show, datamax, nstars, ncores):
+def make_psf(filepath, filename, filt_name, show, datamax, nstars, ncores, catalog_filepath):
 
     # TODO: add stage checking generally to stop errors
 
@@ -22,54 +23,38 @@ def make_psf(filepath, filename, show, datamax, nstars, ncores):
 
     if not nstars:
         nstars = 12
+    size = 25
 
     print(f'Working on {filename}')
     full_filepath = filepath + filename
     data = getdata(full_filepath, 0)
     banzai = getdata(full_filepath, 1)
-    # TODO: be smarter about saving useful stars, add field option
-    banzai_coords = _filter_banzai(banzai, datamax)[:100]
-    print(f'\t{len(banzai_coords)} stars detected')
-
-    size = 25
     metadata = load_pickle(filename)
-    if 'cr_coords' in metadata.keys():
-        cr_coords = metadata['cr_coords']
-        print(f'\tIgnoring {len(cr_coords)} cosmic rays . . .')
 
-        tree = spatial.KDTree(cr_coords)
-        distances = tree.query(banzai_coords)[0]
-        sep_constraint = distances > size
-        psf_stars = Table(banzai_coords[sep_constraint][:nstars],
-                          names=['x', 'y'])
-        banzai_coords = Table(banzai_coords[sep_constraint],
-                              names=['x', 'y'])
-    else:
-        print('\t-s cosmic not run, not ignoring cosmic rays . . .')
-        psf_stars = Table(banzai_coords[:nstars],
-                          names=['x', 'y'])
-        banzai_coords = Table(banzai_coords,
-                              names=['x', 'y'])
-
-    nddata = NDData(data=data)
-    stars = extract_stars(nddata, psf_stars, size=size)
+    # TODO: be smarter about saving useful stars, add field option
+    banzai_coords = _filter_banzai(banzai, datamax)
+    stars_without_cosmics = _filter_cosmics(metadata, size, banzai_coords)
+    all_stars = _filter_to_catalog(stars_without_cosmics, catalog_filepath, filt_name, filepath, filename)
+    psf_stars = all_stars[:nstars]
+        
+    extracted_stars = extract_stars(NDData(data=data), psf_stars, size=size)
 
     print('\tBuilding psf . . .')
     epsf_builder = EPSFBuilder(oversampling=2, maxiters=3,
                                progress_bar=False)
-    epsf, fitted_stars = epsf_builder(stars)
+    epsf, fitted_stars = epsf_builder(extracted_stars)
     # can only pickle python built-ins?
     create_or_update_pickle(filename=filename, key='epsf',
                             val=epsf.data.tolist())
     create_or_update_pickle(filename=filename, key='psf_fitted_stars',
-                            val=np.array(banzai_coords).tolist())
+                            val=np.array(all_stars).tolist())
     #create_or_update_pickle(filename=filename, key='psf_fitted_stars', val=fitted_stars)
 
     t_end = time.time()
     print(f'Time to generate psf (s): {t_end-t_start:.2f}')
 
     if show and ncores == 1:
-        check_psf(data, filename, epsf.data, banzai_coords, psf_stars, size)
+        check_psf(data, filename, epsf.data, all_stars, psf_stars, size)
     elif show and ncores != 1:
         print("Can't display psfs while using multiple cores")
 
@@ -129,5 +114,38 @@ def _filter_banzai(banzai, datamax):
     x = banzai_filtered['x'][sorted_indices[::-1]]
     y = banzai_filtered['y'][sorted_indices[::-1]]
     banzai_coords = np.array([coord for coord in zip(x, y)])
+    
+    print(f'\t{len(banzai_coords)} stars detected')
 
     return banzai_coords
+
+
+def _filter_cosmics(metadata, size, banzai_coords):
+
+    if 'cr_coords' in metadata.keys():
+        cr_coords = metadata['cr_coords']
+        print(f'\tIgnoring {len(cr_coords)} cosmic rays . . .')
+
+        tree = spatial.KDTree(cr_coords)
+        distances = tree.query(banzai_coords)[0]
+        sep_constraint = distances > size
+        all_stars = Table(banzai_coords[sep_constraint],
+                              names=['x', 'y'])
+    else:
+        print('\t-s cosmic not run, not ignoring cosmic rays . . .')
+        all_stars = Table(banzai_coords,
+                              names=['x', 'y'])
+
+    return all_stars
+
+
+def _filter_to_catalog(stars_without_cosmics, catalog, filt_name, filepath, filename):
+    if not catalog:
+        print('\tNo catalog to crossmatch to, taking all remaining banzai objects . . .')
+        return stars_without_cosmics
+    else:
+        print('\tLimiting to catalog stars . . .')
+        stars_matches, _ = catalog_crossmatch(filepath, filename, stars_without_cosmics, catalog, 
+                                             filt_name, max_sep=2, max_mag=25)
+        return stars_matches
+
