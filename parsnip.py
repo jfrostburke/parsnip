@@ -41,6 +41,8 @@ if __name__ == "__main__":
                              'or calibrating zeropoints')
     parser.add_argument('--show', action='store_true',
                         help='displays plots for visualization and analysis')
+    parser.add_argument('--plot_mag', action='store_true',
+                        help='displays and compares mags during zcat stage')
     parser.add_argument('--ncores', type=int,
                         default=1, const=1, nargs='?',
                         help='number of cores to run on')
@@ -98,11 +100,18 @@ if __name__ == "__main__":
 
     if args.stage == 'zcat' or args.stage == 'all':
         from zeropoint import make_zeropoint
+        import matplotlib.pyplot as plt
         print('Generating zeropoints . . .')
         print()
+        fig, ax = plt.subplots()
         catalog = utils.get_catalog(**db_dic, image=images[0])
         for image in images:
-            make_zeropoint(image=image, catalog=catalog, show=args.show)
+            make_zeropoint(image=image, catalog=catalog, show=args.show, 
+                           plot_mag=args.plot_mag, ax=ax)
+        if args.plot_mag:
+            ax.legend()
+            plt.show()
+            plt.close()
         print()
 
     db_dic['db_session'].close()

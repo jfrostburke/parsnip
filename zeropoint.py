@@ -5,7 +5,7 @@ from utils import load_pickle
 from crossmatch import catalog_crossmatch
 
 
-def make_zeropoint(image, catalog, show):
+def make_zeropoint(image, catalog, show, plot_mag, ax):
 
     if image.filter not in ['B', 'V', 'gp', 'rp', 'ip']:
         print(f'Skipping {image.filename} (cannot calibrate filter)')
@@ -34,6 +34,17 @@ def make_zeropoint(image, catalog, show):
     dsn_mag = np.sqrt(sn['dpsfmag']**2 + dzeropoint**2)
     print(f'\tparsnip:     {sn_mag:.3f} ± {dsn_mag:.3f}')
     print(f'\tlcogtsnpipe: {image.mag:.3f} ± {image.dmag:.3f}')
+
+    if plot_mag:
+        _, labels = ax.get_legend_handles_labels()
+        parsnip_label = 'parsnip' if 'parsnip' not in labels else None
+        lcogtsnpipe_label = 'lcogtsnpipe' if 'lcogtsnpipe' not in labels else None
+        
+        ax.errorbar(image.mjd, sn_mag, yerr=dsn_mag, marker='x', 
+                    label=parsnip_label, color='blue')
+        if int(image.mag) != 9999 and int(image.dmag) != 9999:
+            ax.errorbar(image.mjd, image.mag, yerr=image.dmag, marker='o', 
+                        label=lcogtsnpipe_label, color='red')
 
     if show:
         plot_zeropoint(zeropoints, dzeropoints, zeropoint)
